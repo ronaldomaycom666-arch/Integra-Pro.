@@ -52,6 +52,7 @@ export default function Sales() {
   const [productSearch, setProductSearch] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [pdfTheme, setPdfTheme] = useState<'light' | 'dark'>('light');
+  const [includeSeller, setIncludeSeller] = useState(true);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [isCartBouncing, setIsCartBouncing] = useState(false);
   const [toasts, setToasts] = useState<{ id: string; message: string }[]>([]);
@@ -83,8 +84,6 @@ export default function Sales() {
   }, [productSearch, products, isModalOpen]);
 
   useEffect(() => {
-    if (!user) return;
-
     const qSales = query(collection(db, 'sales'), orderBy('createdAt', 'desc'));
     const unsubscribeSales = onSnapshot(qSales, (snapshot) => {
       setSales(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale)));
@@ -162,7 +161,7 @@ export default function Sales() {
   const handleExportPDF = (sale: Sale, share: boolean = false) => {
     if (!settings) return;
     const customer = customers.find(c => c.id === sale.customerId);
-    generateSalePDF(sale, settings, profile, customer, { share, theme: pdfTheme });
+    generateSalePDF(sale, settings, profile, customer, { share, theme: pdfTheme, includeSeller });
   };
 
   const handleGenerateQuote = (share: boolean = false) => {
@@ -182,7 +181,7 @@ export default function Sales() {
       userId: user.uid
     };
 
-    generateSalePDF(quoteData, settings, profile, customer, { share, theme: pdfTheme });
+    generateSalePDF(quoteData, settings, profile, customer, { share, theme: pdfTheme, includeSeller });
   };
 
   const handleExportReport = (share: boolean = false) => {
@@ -813,6 +812,21 @@ export default function Sales() {
                         Escuro
                       </button>
                     </div>
+                  </div>
+
+                  <div className="mb-8">
+                    <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-3">Informações do Vendedor</label>
+                    <button 
+                      onClick={() => setIncludeSeller(!includeSeller)}
+                      className={`w-full flex items-center justify-between px-4 py-3 bg-[var(--bg-card)] border border-[var(--border-main)] rounded-2xl transition-all ${
+                        includeSeller ? 'border-accent' : ''
+                      }`}
+                    >
+                      <span className="text-sm font-medium text-[var(--text-main)]">Incluir Vendedor no PDF</span>
+                      <div className={`w-10 h-5 rounded-full p-1 transition-all ${includeSeller ? 'bg-accent' : 'bg-slate-700'}`}>
+                        <div className={`w-3 h-3 bg-white rounded-full transition-all ${includeSeller ? 'translate-x-5' : 'translate-x-0'}`} />
+                      </div>
+                    </button>
                   </div>
 
                   <div className="mb-8">

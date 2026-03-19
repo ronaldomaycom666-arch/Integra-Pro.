@@ -4,7 +4,6 @@ import {
   Package, 
   Users, 
   ShoppingCart, 
-  LogOut, 
   Menu, 
   X,
   TrendingUp,
@@ -17,7 +16,12 @@ import {
   Settings as SettingsIcon,
   Bell,
   Sun,
-  Moon
+  Moon,
+  AlertTriangle,
+  Mail,
+  Lock as LockIcon,
+  HelpCircle,
+  Edit2
 } from 'lucide-react';
 import { Logo } from './components/Logo';
 import { useTheme } from './ThemeContext';
@@ -25,6 +29,7 @@ import { useAuth } from './AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { PHOTO_FILTERS } from './constants';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -41,17 +46,29 @@ import NotificationCenter from './components/NotificationCenter';
 import { collection, onSnapshot, query, orderBy, doc, getDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './firebase';
 import { AppNotification, AppSettings, Product } from './types';
-import { PHOTO_FILTERS } from './constants';
+
+import LandingPage from './components/LandingPage';
+import EntryScreen from './components/EntryScreen';
 
 type Tab = 'dashboard' | 'products' | 'customers' | 'sales' | 'reports' | 'settings';
 
 export default function App() {
-  const { user, profile, loading, login, logout } = useAuth();
+  const { user, profile, loading, loginAnonymously, loginWithEmail } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isCartBouncing, setIsCartBouncing] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [showManualLogin, setShowManualLogin] = useState(false);
+  const [showLanding, setShowLanding] = useState(() => {
+    const saved = localStorage.getItem('integra-pro-landing-seen');
+    return !saved;
+  });
+  const [showEntry, setShowEntry] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const [settings, setSettings] = useState<AppSettings>({
     lowStockThreshold: 5,
     currency: 'BRL',
@@ -59,10 +76,32 @@ export default function App() {
     companyName: 'Integra Pro'
   });
 
+  const handleStartApp = () => {
+    setShowLanding(false);
+    localStorage.setItem('integra-pro-landing-seen', 'true');
+  };
+
+  const handleEnterApp = () => {
+    setShowEntry(false);
+  };
+
+  // Auto-login anonymously if no user
+  React.useEffect(() => {
+    if (!loading && !user) {
+      loginAnonymously().catch((err: any) => {
+        console.error('Auth Error:', err);
+        const message = err.message || '';
+        // If it's an admin-restricted error, we don't show a global banner.
+        // The app will just stay in Guest Mode.
+        if (err.code !== 'auth/admin-restricted-operation' && !message.includes('admin-restricted-operation')) {
+          setAuthError(message || 'Erro ao realizar login automático.');
+        }
+      });
+    }
+  }, [loading, user, loginAnonymously]);
+
   // Fetch Settings & Products for Low Stock Alerts
   React.useEffect(() => {
-    if (!user) return;
-
     // Fetch Settings
     const unsubscribeSettings = onSnapshot(doc(db, 'settings', 'global'), (snapshot) => {
       if (snapshot.exists()) {
@@ -105,7 +144,7 @@ export default function App() {
       unsubscribeSettings();
       unsubscribeProducts();
     };
-  }, [user, settings.lowStockThreshold]);
+  }, [settings.lowStockThreshold]);
 
   React.useEffect(() => {
     const handleBounce = () => {
@@ -124,9 +163,17 @@ export default function App() {
     setNotifications([]);
   };
 
+  if (showEntry) {
+    return <EntryScreen onEnter={handleEnterApp} />;
+  }
+
+  if (showLanding) {
+    return <LandingPage onStart={handleStartApp} />;
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--bg-main)] flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--bg-main)] flex items-center justify-center p-4">
         <motion.div 
           animate={{ rotate: 360 }}
           transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
@@ -136,31 +183,82 @@ export default function App() {
     );
   }
 
-  if (!user) {
+  // If manual login is requested (e.g. from settings or fallback)
+  if (!user && showManualLogin) {
+    const handleEmailLogin = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setError('');
+      try {
+        await loginWithEmail(email, password);
+      } catch (err: any) {
+        if (err.code === 'auth/admin-restricted-operation') {
+          setError('O Login por E-mail está desativado no Firebase Console.');
+        } else {
+          setError(err.message || 'Erro ao entrar');
+        }
+      }
+    };
+
     return (
       <div className="min-h-screen bg-[var(--bg-main)] flex flex-col items-center justify-center p-4">
         <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full bg-[var(--bg-card)] rounded-3xl p-10 text-center border border-[var(--border-main)] shadow-xl"
+          className="max-w-md w-full bg-[var(--bg-card)] rounded-3xl p-8 text-center border border-[var(--border-main)] shadow-xl"
         >
-          <Logo className="w-16 h-16 mx-auto mb-8" />
-          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-3 tracking-tight">Integra Pro</h1>
-          <p className="text-[var(--text-muted)] mb-10 text-sm leading-relaxed">Gestão inteligente para o seu negócio crescer com controle e precisão.</p>
+          <Logo className="w-16 h-16 mx-auto mb-6" />
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2 tracking-tight">Integra Pro</h1>
+          <p className="text-[var(--text-muted)] mb-8 text-sm leading-relaxed">Login de Emergência</p>
           
-          <button
-            onClick={login}
-            className="w-full py-4 px-6 brand-gradient text-white font-medium rounded-2xl transition-all flex items-center justify-center gap-3 active:scale-[0.98] shadow-lg shadow-accent/20"
-          >
-            <Plus className="w-4 h-4" />
-            Entrar no Sistema
-          </button>
-          
-          <div className="mt-8 text-center">
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">
-              Desenvolvido por R.M Tecnologia LTDA
-            </p>
-          </div>
+          {error && (
+            <div className="mb-6 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-500 text-xs font-medium">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleEmailLogin} className="space-y-4 text-left">
+            <div>
+              <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-2 ml-1">E-mail</label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                <input 
+                  type="email" 
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 bg-[var(--bg-input)] border border-[var(--border-main)] rounded-2xl outline-none focus:border-accent text-sm text-[var(--text-main)]"
+                  placeholder="seu@email.com"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-2 ml-1">Senha</label>
+              <div className="relative">
+                <LockIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                <input 
+                  type="password" 
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 bg-[var(--bg-input)] border border-[var(--border-main)] rounded-2xl outline-none focus:border-accent text-sm text-[var(--text-main)]"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              className="w-full py-4 px-6 brand-gradient text-white font-medium rounded-2xl transition-all active:scale-[0.98] shadow-lg shadow-accent/20 mt-2"
+            >
+              Entrar
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowManualLogin(false)}
+              className="w-full text-xs text-[var(--text-muted)] font-bold hover:underline mt-4"
+            >
+              Tentar Acesso Automático novamente
+            </button>
+          </form>
         </motion.div>
       </div>
     );
@@ -177,6 +275,27 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-main)] flex font-sans text-[var(--text-main)] overflow-x-hidden">
+      {/* Auth Error Banner */}
+      <AnimatePresence>
+        {authError && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="fixed top-0 left-0 right-0 z-[100] bg-amber-500 text-white px-4 py-2 text-xs font-bold flex items-center justify-center gap-2 shadow-lg"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            <span>{authError}</span>
+            <button 
+              onClick={() => setAuthError(null)}
+              className="ml-4 p-1 hover:bg-white/20 rounded-lg transition-colors"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Sidebar - Desktop Only */}
       <aside 
         className={cn(
@@ -231,30 +350,42 @@ export default function App() {
           </nav>
 
           <div className={cn("p-4 border-t border-[var(--border-main)]", !isSidebarOpen && "px-2")}>
+            {isSidebarOpen && (
+              <div className="px-4 py-2 mb-4">
+                <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest leading-tight">
+                  Desenvolvido por
+                </p>
+                <p className="text-[10px] font-black text-[var(--text-main)] uppercase tracking-tighter">
+                  R.M Tecnologia LTDA
+                </p>
+              </div>
+            )}
             <div className={cn(
               "flex items-center gap-3 p-3 rounded-2xl",
               !isSidebarOpen && "justify-center px-0"
             )}>
-              <img 
-                src={profile?.photoURL || `https://ui-avatars.com/api/?name=${profile?.displayName}`} 
-                className="w-10 h-10 rounded-xl border border-[var(--border-main)] object-cover"
-                alt="Profile"
-                style={{ filter: PHOTO_FILTERS.find(f => f.id === profile?.photoFilter)?.filter || 'none' }}
-              />
+              <div className="relative">
+                <img 
+                  src={profile?.photoURL || `https://ui-avatars.com/api/?name=${profile?.displayName}`} 
+                  className="w-10 h-10 rounded-xl border border-[var(--border-main)] object-cover"
+                  alt="Profile"
+                  style={{ filter: PHOTO_FILTERS.find(f => f.id === profile?.photoFilter)?.filter || 'none' }}
+                />
+                <button 
+                  onClick={() => setActiveTab('settings')}
+                  className="absolute -bottom-1 -right-1 p-1 bg-accent text-white rounded-full shadow-lg hover:scale-110 transition-transform"
+                  title="Editar Perfil"
+                >
+                  <Edit2 className="w-2.5 h-2.5" />
+                </button>
+              </div>
               {isSidebarOpen && (
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-[var(--text-main)] truncate">{profile?.displayName}</p>
-                  <p className="text-[10px] text-[var(--text-muted)] truncate uppercase tracking-widest font-bold">{profile?.role}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-[var(--text-main)] truncate">{profile?.displayName || 'Visitante'}</p>
+                  </div>
+                  <p className="text-[10px] text-[var(--text-muted)] truncate uppercase tracking-widest font-bold">{profile?.role === 'guest' ? 'Visitante' : profile?.role}</p>
                 </div>
-              )}
-              {isSidebarOpen && (
-                <button 
-                  onClick={user ? logout : login}
-                  className="p-2 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-active)] rounded-lg transition-colors"
-                  title={user ? "Sair" : "Entrar"}
-                >
-                  {user ? <LogOut className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                </button>
               )}
             </div>
           </div>
@@ -295,6 +426,14 @@ export default function App() {
             </div>
             
             <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setShowLanding(true)}
+                className="p-2.5 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-active)] rounded-2xl transition-all"
+                title="Ver Tutorial"
+              >
+                <HelpCircle className="w-5 h-5" />
+              </button>
+              
               <button 
                 onClick={toggleTheme}
                 className="p-2.5 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-active)] rounded-2xl transition-all"

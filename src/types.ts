@@ -5,7 +5,7 @@ export interface UserProfile {
   photoURL?: string;
   photoFilter?: string;
   phone?: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'guest';
   createdAt: string;
 }
 

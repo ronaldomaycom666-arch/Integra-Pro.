@@ -41,8 +41,6 @@ export default function Dashboard() {
   const isDark = theme === 'dark';
 
   useEffect(() => {
-    if (!user) return;
-
     const qSales = query(collection(db, 'sales'), orderBy('createdAt', 'desc'), limit(50));
     const unsubscribeSales = onSnapshot(qSales, (snapshot) => {
       setSales(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale)));

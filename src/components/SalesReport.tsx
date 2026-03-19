@@ -54,8 +54,6 @@ export default function SalesReport() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('all');
 
   useEffect(() => {
-    if (!user) return;
-
     const unsubscribeSales = onSnapshot(
       query(collection(db, 'sales'), orderBy('createdAt', 'desc')),
       (snapshot) => {

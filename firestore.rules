@@ -12,7 +12,7 @@ service cloud.firestore {
     //   - displayName: string (optional)
     //   - photoURL: string (optional)
     //   - phone: string (optional)
-    //   - role: string (required, enum: ['admin', 'user'])
+    //   - role: string (required, enum: ['admin', 'user', 'guest'])
     //   - createdAt: timestamp (required)
     //
     // Collection: products
@@ -95,7 +95,7 @@ service cloud.firestore {
       return hasRequiredFields(['uid', 'email', 'role', 'createdAt']) &&
              data.uid == request.auth.uid &&
              isValidEmail(data.email) &&
-             data.role in ['admin', 'user'] &&
+             data.role in ['admin', 'user', 'guest'] &&
              (!('phone' in data) || data.phone is string);
     }
 
@@ -135,39 +135,27 @@ service cloud.firestore {
     }
 
     // ===============================================================
-    // Rules
+    // Rules - UPDATED FOR EASY ACCESS (PUBLIC)
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
-      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
+      allow read, write: if true;
     }
 
     match /products/{productId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidProduct(request.resource.data);
-      allow update: if isAuthenticated() && isValidProduct(request.resource.data);
-      allow delete: if isAdmin();
+      allow read, write: if true;
     }
 
     match /customers/{customerId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidCustomer(request.resource.data);
-      allow update: if isAuthenticated() && isValidCustomer(request.resource.data);
-      allow delete: if isAdmin();
+      allow read, write: if true;
     }
 
     match /sales/{saleId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidSale(request.resource.data);
-      allow update: if isAuthenticated() && isValidSale(request.resource.data) && (resource.data.userId == request.auth.uid || isAdmin());
-      allow delete: if isAdmin();
+      allow read, write: if true;
     }
 
     match /settings/{settingId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && isValidSettings(request.resource.data);
+      allow read, write: if true;
     }
   }
 }

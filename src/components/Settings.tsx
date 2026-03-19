@@ -28,6 +28,12 @@ import { AppSettings, UserProfile } from '../types';
 import { useAuth } from '../AuthContext';
 import { motion } from 'motion/react';
 import { PHOTO_FILTERS } from '../constants';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 export default function Settings() {
   const { profile, updateProfile } = useAuth();
@@ -57,9 +63,11 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showProfileSuccess, setShowProfileSuccess] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const companyLogoRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (profile) {
@@ -75,7 +83,6 @@ export default function Settings() {
 
   useEffect(() => {
     const fetchSettings = async () => {
-      if (!profile) return;
       try {
         const docRef = doc(db, 'settings', 'global');
         const docSnap = await getDoc(docRef);
@@ -125,14 +132,44 @@ export default function Settings() {
 
     setUploading(true);
     try {
+      // For guests, we can still use the 'guest' path or just convert to base64 if storage fails
+      // But let's try storage first as it's more robust
       const storageRef = ref(storage, `profiles/${profile.uid}`);
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
       setUserProfile(prev => ({ ...prev, photoURL: url }));
     } catch (error) {
-      console.error("Error uploading photo:", error);
+      console.error("Error uploading photo, falling back to local preview:", error);
+      // Fallback: use FileReader for local preview if storage fails (e.g. rules or not authenticated)
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setUserProfile(prev => ({ ...prev, photoURL: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleCompanyLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingLogo(true);
+    try {
+      const storageRef = ref(storage, `company/logo_${Date.now()}`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      setSettings(prev => ({ ...prev, companyLogo: url }));
+    } catch (error) {
+      console.error("Error uploading company logo, falling back to local preview:", error);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSettings(prev => ({ ...prev, companyLogo: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setUploadingLogo(false);
     }
   };
 
@@ -158,12 +195,33 @@ export default function Settings() {
         </div>
       </div>
 
+      {profile?.role === 'guest' && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-6 bg-amber-500/10 border border-amber-500/20 rounded-3xl flex items-start gap-4"
+        >
+          <div className="p-2 bg-amber-500/20 rounded-xl text-amber-500">
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+          <div className="space-y-1">
+            <h4 className="text-sm font-bold text-amber-500 uppercase tracking-widest">Modo Visitante Ativo</h4>
+            <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+              O Login Anônimo está desativado no Firebase Console. Suas alterações serão salvas apenas localmente neste navegador.
+              Para habilitar a sincronização em nuvem, ative o <strong>Login Anônimo</strong> em <em>Authentication &gt; Sign-in method</em>.
+            </p>
+          </div>
+        </motion.div>
+      )}
+
       {/* User Profile Settings */}
       <form onSubmit={handleSaveProfile} className="space-y-6">
         <div className="bg-[var(--bg-card)] p-8 rounded-3xl border border-[var(--border-main)] shadow-sm space-y-6">
           <div className="flex items-center gap-3 mb-2">
             <User className="w-5 h-5 text-[var(--text-muted)]" />
-            <h3 className="text-lg font-bold text-[var(--text-main)]">Meu Perfil (Vendedor)</h3>
+            <h3 className="text-lg font-bold text-[var(--text-main)]">
+              Meu Perfil {profile?.role === 'guest' ? '(Visitante)' : '(Vendedor)'}
+            </h3>
           </div>
           
           <div className="flex flex-col md:flex-row gap-8 items-start">
@@ -232,8 +290,12 @@ export default function Settings() {
                     <input 
                       type="email" 
                       value={userProfile.email}
-                      disabled
-                      className="w-full pl-12 pr-4 py-3 bg-[var(--bg-input)] border border-[var(--border-main)] rounded-2xl outline-none cursor-not-allowed text-[var(--text-muted)] opacity-60"
+                      onChange={(e) => setUserProfile({...userProfile, email: e.target.value})}
+                      disabled={profile?.role !== 'guest'}
+                      className={cn(
+                        "w-full pl-12 pr-4 py-3 bg-[var(--bg-input)] border border-[var(--border-main)] rounded-2xl outline-none focus:border-accent focus:bg-[var(--bg-card)] transition-all text-[var(--text-main)]",
+                        profile?.role !== 'guest' && "cursor-not-allowed opacity-60 text-[var(--text-muted)]"
+                      )}
                       placeholder="seu@email.com"
                     />
                   </div>
@@ -313,21 +375,51 @@ export default function Settings() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="md:col-span-2">
-              <label className="block text-sm font-bold text-[var(--text-muted)] mb-2">Logo da Empresa (URL)</label>
-              <div className="flex gap-4">
-                <div className="w-20 h-20 bg-[var(--bg-input)] border border-[var(--border-main)] rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
-                  {settings.companyLogo ? (
-                    <img src={settings.companyLogo} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  ) : (
-                    <ImageIcon className="w-8 h-8 text-[var(--text-muted)]" />
-                  )}
+              <label className="block text-sm font-bold text-[var(--text-muted)] mb-2">Logo da Empresa</label>
+              <div className="flex items-center gap-6">
+                <div className="relative group">
+                  <div className="w-24 h-24 bg-[var(--bg-input)] border-2 border-dashed border-[var(--border-main)] rounded-2xl flex items-center justify-center overflow-hidden shrink-0 relative">
+                    {settings.companyLogo ? (
+                      <img src={settings.companyLogo} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <ImageIcon className="w-8 h-8 text-[var(--text-muted)]" />
+                    )}
+                    
+                    {uploadingLogo && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <Loader2 className="w-6 h-6 text-white animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                  
+                  <button
+                    type="button"
+                    onClick={() => companyLogoRef.current?.click()}
+                    className="absolute -bottom-2 -right-2 p-2 brand-gradient text-white rounded-full shadow-lg hover:scale-110 transition-all active:scale-95 z-10"
+                    title="Alterar Logo"
+                  >
+                    <Camera className="w-4 h-4" />
+                  </button>
                 </div>
+
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-[var(--text-main)] mb-1">Logotipo da sua marca</p>
+                  <p className="text-xs text-[var(--text-muted)] mb-3">Recomendado: 512x512px (PNG ou JPG)</p>
+                  <button
+                    type="button"
+                    onClick={() => companyLogoRef.current?.click()}
+                    className="text-xs font-bold text-accent hover:underline uppercase tracking-widest"
+                  >
+                    Clique para fazer upload
+                  </button>
+                </div>
+
                 <input 
-                  type="text" 
-                  value={settings.companyLogo}
-                  onChange={(e) => setSettings({...settings, companyLogo: e.target.value})}
-                  className="flex-1 px-4 py-3 bg-[var(--bg-input)] border border-[var(--border-main)] rounded-2xl outline-none focus:border-accent focus:bg-[var(--bg-card)] transition-all text-[var(--text-main)]"
-                  placeholder="https://exemplo.com/logo.png"
+                  type="file"
+                  ref={companyLogoRef}
+                  onChange={handleCompanyLogoChange}
+                  accept="image/*"
+                  className="hidden"
                 />
               </div>
             </div>

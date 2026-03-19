@@ -38,8 +38,6 @@ export default function Customers() {
   });
 
   useEffect(() => {
-    if (!user) return;
-
     const q = query(collection(db, 'customers'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer)));

@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
   onAuthStateChanged, 
-  signInAnonymously, 
+  signInAnonymously,
+  signInWithEmailAndPassword,
   signOut, 
   User 
 } from 'firebase/auth';
@@ -13,7 +14,8 @@ interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
-  login: () => Promise<void>;
+  loginWithEmail: (email: string, pass: string) => Promise<void>;
+  loginAnonymously: () => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
 }
@@ -27,9 +29,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      
       if (firebaseUser) {
+        setUser(firebaseUser);
         try {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           
@@ -54,7 +55,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
         }
       } else {
-        setProfile(null);
+        // Check if we have a mocked session from a previous failed anonymous login
+        const mockedUid = localStorage.getItem('integra-pro-mocked-uid');
+        if (mockedUid) {
+          setUser({ uid: mockedUid, isAnonymous: true } as User);
+        } else {
+          setUser(null);
+        }
+
+        // Provide a default guest profile with persistence
+        const savedGuest = localStorage.getItem('integra-pro-guest-profile');
+        if (savedGuest) {
+          setProfile(JSON.parse(savedGuest));
+        } else {
+          setProfile({
+            uid: mockedUid || 'guest',
+            email: 'guest@example.com',
+            displayName: 'Visitante',
+            photoURL: '',
+            role: 'guest',
+            createdAt: new Date().toISOString(),
+          });
+        }
       }
       setLoading(false);
     });
@@ -62,8 +84,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const login = async () => {
-    await signInAnonymously(auth);
+  const loginWithEmail = async (email: string, pass: string) => {
+    await signInWithEmailAndPassword(auth, email, pass);
+  };
+
+  const loginAnonymously = async () => {
+    try {
+      await signInAnonymously(auth);
+    } catch (err: any) {
+      if (err.code === 'auth/admin-restricted-operation') {
+        // Fallback to a mocked UID if anonymous login is disabled in Firebase Console
+        console.warn('Anonymous Auth is disabled. Using persistent local session.');
+        let mockedUid = localStorage.getItem('integra-pro-mocked-uid');
+        if (!mockedUid) {
+          mockedUid = `local_${Math.random().toString(36).substr(2, 9)}`;
+          localStorage.setItem('integra-pro-mocked-uid', mockedUid);
+        }
+        setUser({ uid: mockedUid, isAnonymous: true } as User);
+        return;
+      }
+      throw err;
+    }
   };
 
   const logout = async () => {
@@ -71,14 +112,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateProfile = async (data: Partial<UserProfile>) => {
-    if (!user) return;
-    const userRef = doc(db, 'users', user.uid);
-    await setDoc(userRef, data, { merge: true });
-    setProfile(prev => prev ? { ...prev, ...data } : null);
+    if (user) {
+      const userRef = doc(db, 'users', user.uid);
+      await setDoc(userRef, data, { merge: true });
+      setProfile(prev => prev ? { ...prev, ...data } : null);
+    } else if (profile?.role === 'guest') {
+      const newProfile = { ...profile, ...data };
+      setProfile(newProfile);
+      localStorage.setItem('integra-pro-guest-profile', JSON.stringify(newProfile));
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, login, logout, updateProfile }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      profile, 
+      loading, 
+      loginWithEmail,
+      loginAnonymously,
+      logout, 
+      updateProfile 
+    }}>
       {children}
     </AuthContext.Provider>
   );

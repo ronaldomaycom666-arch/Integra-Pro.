@@ -46,8 +46,6 @@ export default function Products() {
   });
 
   useEffect(() => {
-    if (!user) return;
-
     const q = query(collection(db, 'products'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));

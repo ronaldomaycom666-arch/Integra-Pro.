@@ -9,12 +9,13 @@ export const generateSalePDF = (
   settings: AppSettings, 
   seller?: UserProfile | null,
   customer?: Customer | null,
-  options?: { share?: boolean; theme?: 'light' | 'dark' }
+  options?: { share?: boolean; theme?: 'light' | 'dark'; includeSeller?: boolean }
 ) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const isDark = options?.theme === 'dark';
+  const includeSeller = options?.includeSeller ?? true; // Default to true for backward compatibility if not specified
 
   // Background for Dark Theme
   if (isDark) {
@@ -123,7 +124,10 @@ export const generateSalePDF = (
   doc.setTextColor(textColorMain[0], textColorMain[1], textColorMain[2]);
   doc.setFont('helvetica', 'bold');
   doc.text('DADOS DO CLIENTE', 20, yPos);
-  doc.text('DADOS DO VENDEDOR', pageWidth / 2 + 10, yPos);
+  
+  if (includeSeller) {
+    doc.text('DADOS DO VENDEDOR', pageWidth / 2 + 10, yPos);
+  }
   
   yPos += 7;
   doc.setFontSize(10);
@@ -144,7 +148,7 @@ export const generateSalePDF = (
     }
     if (customer.address) {
       clientY += 5;
-      const clientAddrLines = doc.splitTextToSize(`End: ${customer.address}`, (pageWidth / 2) - 25);
+      const clientAddrLines = doc.splitTextToSize(`End: ${customer.address}`, (includeSeller ? (pageWidth / 2) - 25 : pageWidth - 40));
       doc.text(clientAddrLines, 20, clientY);
       clientY += (clientAddrLines.length - 1) * 5;
     }
@@ -152,14 +156,18 @@ export const generateSalePDF = (
 
   // Seller Details
   let sellerY = yPos;
-  doc.text(seller?.displayName || 'Sistema', pageWidth / 2 + 10, sellerY);
-  if (seller?.email) {
-    sellerY += 5;
-    doc.text(`E-mail: ${seller.email}`, pageWidth / 2 + 10, sellerY);
-  }
-  if (seller?.phone) {
-    sellerY += 5;
-    doc.text(`Tel: ${seller.phone}`, pageWidth / 2 + 10, sellerY);
+  if (includeSeller) {
+    doc.text(seller?.displayName || 'Sistema', pageWidth / 2 + 10, sellerY);
+    if (seller?.email) {
+      sellerY += 5;
+      doc.text(`E-mail: ${seller.email}`, pageWidth / 2 + 10, sellerY);
+    }
+    if (seller?.phone) {
+      sellerY += 5;
+      doc.text(`Tel: ${seller.phone}`, pageWidth / 2 + 10, sellerY);
+    }
+  } else {
+    sellerY = clientY;
   }
 
   yPos = Math.max(clientY, sellerY) + 15;
