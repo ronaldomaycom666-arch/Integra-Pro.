@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Sale, AppSettings, UserProfile } from '../types';
+import { Sale, AppSettings, UserProfile, Customer } from '../types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -8,6 +8,7 @@ export const generateSalePDF = (
   sale: Sale, 
   settings: AppSettings, 
   seller?: UserProfile | null,
+  customer?: Customer | null,
   options?: { share?: boolean; theme?: 'light' | 'dark' }
 ) => {
   const doc = new jsPDF();
@@ -27,14 +28,28 @@ export const generateSalePDF = (
   const textColorMuted = isDark ? [148, 163, 184] : [100, 116, 139]; // Slate-400 : Slate-500
   const borderColor = isDark ? [30, 41, 59] : [226, 232, 240]; // Slate-800 : Slate-200
 
-  // Header - Company Info
-  doc.setFontSize(20);
+  // Header - Company Logo & Info
+  let yPos = 20;
+  
+  if (settings.companyLogo) {
+    try {
+      doc.addImage(settings.companyLogo, 'PNG', 20, yPos, 25, 25);
+      yPos += 30;
+    } catch (e) {
+      console.error('Error adding logo to PDF:', e);
+    }
+  }
+
+  doc.setFontSize(22);
   doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  doc.text(settings.companyName, 20, 20);
+  doc.setFont('helvetica', 'bold');
+  doc.text(settings.companyName, 20, yPos);
+  yPos += 8;
   
   doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
   doc.setTextColor(textColorMuted[0], textColorMuted[1], textColorMuted[2]);
-  let yPos = 28;
+  
   if (settings.cnpj) {
     doc.text(`CNPJ: ${settings.cnpj}`, 20, yPos);
     yPos += 5;
@@ -43,24 +58,47 @@ export const generateSalePDF = (
     doc.text(`Tel: ${settings.phone}`, 20, yPos);
     yPos += 5;
   }
+  if (settings.email) {
+    doc.text(`E-mail: ${settings.email}`, 20, yPos);
+    yPos += 5;
+  }
   if (settings.address) {
     const addressLines = doc.splitTextToSize(settings.address, 80);
     doc.text(addressLines, 20, yPos);
     yPos += addressLines.length * 5;
   }
 
+  // Social Media
+  if (settings.socialMedia) {
+    const socials = [];
+    if (settings.socialMedia.instagram) socials.push(`Insta: ${settings.socialMedia.instagram}`);
+    if (settings.socialMedia.facebook) socials.push(`FB: ${settings.socialMedia.facebook}`);
+    if (settings.socialMedia.whatsapp) socials.push(`Whats: ${settings.socialMedia.whatsapp}`);
+    
+    if (socials.length > 0) {
+      doc.setFontSize(8);
+      doc.text(socials.join(' | '), 20, yPos);
+      yPos += 5;
+    }
+  }
+
   // Sale Info (Right side)
-  doc.setFontSize(12);
+  const rightX = pageWidth - 20;
+  doc.setFontSize(14);
   doc.setTextColor(textColorMain[0], textColorMain[1], textColorMain[2]);
-  doc.text(sale.status === 'pending' ? 'ORÇAMENTO' : 'COMPROVANTE DE VENDA', pageWidth - 20, 20, { align: 'right' });
+  doc.setFont('helvetica', 'bold');
+  doc.text(sale.status === 'pending' ? 'ORÇAMENTO' : 'COMPROVANTE DE VENDA', rightX, 20, { align: 'right' });
   
   doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
   doc.setTextColor(textColorMuted[0], textColorMuted[1], textColorMuted[2]);
-  doc.text(`Nº: #${sale.id?.slice(-6).toUpperCase() || 'NOVO'}`, pageWidth - 20, 28, { align: 'right' });
-  doc.text(`Data: ${format(new Date(sale.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`, pageWidth - 20, 33, { align: 'right' });
+  doc.text(`Nº: #${sale.id?.slice(-6).toUpperCase() || 'NOVO'}`, rightX, 28, { align: 'right' });
+  doc.text(`Data: ${format(new Date(sale.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`, rightX, 33, { align: 'right' });
+  
   if (sale.dueDate) {
-    doc.text(`Vencimento: ${format(new Date(sale.dueDate + 'T00:00:00'), 'dd/MM/yyyy', { locale: ptBR })}`, pageWidth - 20, 38, { align: 'right' });
+    doc.text(`Vencimento: ${format(new Date(sale.dueDate + 'T00:00:00'), 'dd/MM/yyyy', { locale: ptBR })}`, rightX, 38, { align: 'right' });
   }
+  
   if (sale.paymentStatus) {
     const statusMap = {
       paid: 'PAGO',
@@ -69,38 +107,62 @@ export const generateSalePDF = (
     };
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.text(`Status Pagamento: ${statusMap[sale.paymentStatus]}`, pageWidth - 20, sale.dueDate ? 43 : 38, { align: 'right' });
+    doc.text(`Status Pagamento: ${statusMap[sale.paymentStatus]}`, rightX, sale.dueDate ? 43 : 38, { align: 'right' });
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
   }
 
   // Divider
+  const dividerY = Math.max(yPos + 5, 60);
   doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
-  doc.line(20, yPos + 5, pageWidth - 20, yPos + 5);
-  yPos += 15;
+  doc.line(20, dividerY, pageWidth - 20, dividerY);
+  yPos = dividerY + 10;
 
   // Customer & Seller Info
   doc.setFontSize(11);
   doc.setTextColor(textColorMain[0], textColorMain[1], textColorMain[2]);
-  doc.text('CLIENTE', 20, yPos);
-  doc.text('VENDEDOR', pageWidth / 2 + 10, yPos);
+  doc.setFont('helvetica', 'bold');
+  doc.text('DADOS DO CLIENTE', 20, yPos);
+  doc.text('DADOS DO VENDEDOR', pageWidth / 2 + 10, yPos);
   
   yPos += 7;
   doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
   doc.setTextColor(textColorMuted[0], textColorMuted[1], textColorMuted[2]);
-  doc.text(sale.customerName || 'Venda Avulsa', 20, yPos);
-  doc.text(seller?.displayName || 'Sistema', pageWidth / 2 + 10, yPos);
   
-  if (seller?.email) {
-    yPos += 5;
-    doc.text(seller.email, pageWidth / 2 + 10, yPos);
-  }
-  if (seller?.phone) {
-    yPos += 5;
-    doc.text(seller.phone, pageWidth / 2 + 10, yPos);
+  // Client Details
+  let clientY = yPos;
+  doc.text(sale.customerName || 'Venda Avulsa', 20, clientY);
+  if (customer) {
+    if (customer.email) {
+      clientY += 5;
+      doc.text(`E-mail: ${customer.email}`, 20, clientY);
+    }
+    if (customer.phone) {
+      clientY += 5;
+      doc.text(`Tel: ${customer.phone}`, 20, clientY);
+    }
+    if (customer.address) {
+      clientY += 5;
+      const clientAddrLines = doc.splitTextToSize(`End: ${customer.address}`, (pageWidth / 2) - 25);
+      doc.text(clientAddrLines, 20, clientY);
+      clientY += (clientAddrLines.length - 1) * 5;
+    }
   }
 
-  yPos += 15;
+  // Seller Details
+  let sellerY = yPos;
+  doc.text(seller?.displayName || 'Sistema', pageWidth / 2 + 10, sellerY);
+  if (seller?.email) {
+    sellerY += 5;
+    doc.text(`E-mail: ${seller.email}`, pageWidth / 2 + 10, sellerY);
+  }
+  if (seller?.phone) {
+    sellerY += 5;
+    doc.text(`Tel: ${seller.phone}`, pageWidth / 2 + 10, sellerY);
+  }
+
+  yPos = Math.max(clientY, sellerY) + 15;
 
   // Items Table
   autoTable(doc, {
@@ -128,9 +190,20 @@ export const generateSalePDF = (
     styles: { fontSize: 9, cellPadding: 4, lineColor: borderColor as [number, number, number], lineWidth: 0.1 }
   });
 
-  // Total
-  const finalY = (doc as any).lastAutoTable.finalY + 10;
-  doc.setFontSize(12);
+  // Total & Observations
+  let finalY = (doc as any).lastAutoTable.finalY + 10;
+  
+  if (sale.observations) {
+    doc.setFontSize(9);
+    doc.setTextColor(textColorMuted[0], textColorMuted[1], textColorMuted[2]);
+    doc.text('Observações:', 20, finalY);
+    finalY += 5;
+    const obsLines = doc.splitTextToSize(sale.observations, pageWidth - 40);
+    doc.text(obsLines, 20, finalY);
+    finalY += (obsLines.length * 5) + 5;
+  }
+
+  doc.setFontSize(14);
   doc.setTextColor(textColorMain[0], textColorMain[1], textColorMain[2]);
   doc.setFont('helvetica', 'bold');
   doc.text(`TOTAL: R$ ${sale.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, pageWidth - 20, finalY, { align: 'right' });

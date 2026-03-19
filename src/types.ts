@@ -69,6 +69,7 @@ export interface AppSettings {
   companyLogo?: string;
   cnpj?: string;
   phone?: string;
+  email?: string;
   address?: string;
   socialMedia?: {
     instagram?: string;

@@ -152,8 +152,8 @@ export default function App() {
             onClick={login}
             className="w-full py-4 px-6 brand-gradient text-white font-medium rounded-2xl transition-all flex items-center justify-center gap-3 active:scale-[0.98] shadow-lg shadow-accent/20"
           >
-            <img src="https://www.google.com/favicon.ico" className="w-4 h-4 bg-white rounded-full p-0.5" alt="Google" />
-            Entrar com Google
+            <Plus className="w-4 h-4" />
+            Entrar no Sistema
           </button>
           
           <div className="mt-8 text-center">
@@ -251,9 +251,9 @@ export default function App() {
                 <button 
                   onClick={user ? logout : login}
                   className="p-2 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-active)] rounded-lg transition-colors"
-                  title={user ? "Sair" : "Entrar com Google"}
+                  title={user ? "Sair" : "Entrar"}
                 >
-                  {user ? <LogOut className="w-5 h-5" /> : <TrendingUp className="w-5 h-5 rotate-90" />}
+                  {user ? <LogOut className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
                 </button>
               )}
             </div>

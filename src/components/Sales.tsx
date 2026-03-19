@@ -161,7 +161,8 @@ export default function Sales() {
 
   const handleExportPDF = (sale: Sale, share: boolean = false) => {
     if (!settings) return;
-    generateSalePDF(sale, settings, profile, { share, theme: pdfTheme });
+    const customer = customers.find(c => c.id === sale.customerId);
+    generateSalePDF(sale, settings, profile, customer, { share, theme: pdfTheme });
   };
 
   const handleGenerateQuote = (share: boolean = false) => {
@@ -181,7 +182,7 @@ export default function Sales() {
       userId: user.uid
     };
 
-    generateSalePDF(quoteData, settings, profile, { share, theme: pdfTheme });
+    generateSalePDF(quoteData, settings, profile, customer, { share, theme: pdfTheme });
   };
 
   const handleExportReport = (share: boolean = false) => {

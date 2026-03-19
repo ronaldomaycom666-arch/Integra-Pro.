@@ -375,6 +375,20 @@ export default function Settings() {
             </div>
 
             <div>
+              <label className="block text-sm font-bold text-[var(--text-muted)] mb-2">E-mail da Empresa</label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                <input 
+                  type="email" 
+                  value={settings.email || ''}
+                  onChange={(e) => setSettings({...settings, email: e.target.value})}
+                  className="w-full pl-12 pr-4 py-3 bg-[var(--bg-input)] border border-[var(--border-main)] rounded-2xl outline-none focus:border-accent focus:bg-[var(--bg-card)] transition-all text-[var(--text-main)]"
+                  placeholder="empresa@email.com"
+                />
+              </div>
+            </div>
+
+            <div>
               <label className="block text-sm font-bold text-[var(--text-muted)] mb-2">Moeda</label>
               <div className="relative">
                 <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
